@@ -1,17 +1,20 @@
 # UDP Voting System with SSL/TLS
 
-![Python](https://img.shields.io/badge/Python-3.x-blue) ![SSL](https://img.shields.io/badge/Security-SSL%2FTLS-green) ![TCP](https://img.shields.io/badge/Protocol-TCP-orange) ![Multi-Client](https://img.shields.io/badge/Multi--Client-Supported-brightgreen)
+![Python](https://img.shields.io/badge/Python-3.x-blue) ![SSL](https://img.shields.io/badge/Security-SSL%2FTLS-green) ![UDP](https://img.shields.io/badge/Protocol-UDP-orange) ![Multi-Client](https://img.shields.io/badge/Multi--Client-Supported-brightgreen)
 
-A secure, multi-client real-time voting system built using TCP sockets with SSL/TLS encryption. Supports concurrent voters, duplicate detection, live result broadcasting, and performance benchmarking.
+A secure, multi-client real-time voting system using UDP for vote transmission and TCP+SSL for encrypted result broadcasting. Supports concurrent voters, duplicate detection, live result broadcasting, and performance benchmarking.
 
 ---
 
 ## Architecture
 ```
-Client 1 ──┐
-Client 2 ──┼──[ SSL/TLS ]──► Server ──► Tally Votes
-Client N ──┘                    │
-                                └──► Broadcast Results to All Clients
+Client 1 ──┐                          ┌──► Tally Votes
+Client 2 ──┼──[ UDP port 5000 ]──────► Server
+Client N ──┘                          └──► Broadcast Results
+                                               │
+Client 1 ◄─┐                                  │
+Client 2 ◄─┼──[ TCP+SSL port 5001 ]───────────┘
+Client N ◄─┘
 ```
 
 ---
@@ -35,16 +38,19 @@ udp-voting-system/
 
 | Message | Format | Direction | Description |
 |---|---|---|---|
-| Vote | `client_id\|seq\|option` | Client → Server | Cast a vote for A, B, or C |
-| ACK | `ACK\|seq` | Server → Client | Vote accepted |
-| NAK | `NAK\|reason` | Server → Client | Vote rejected with reason |
-| Result | `RESULT\|A:n\|B:n\|C:n` | Server → All | Live tally broadcast |
+| Vote | `client_id\|seq\|option` | Client → Server | Cast a vote for A, B, or C (UDP) |
+| ACK | `ACK\|seq` | Server → Client | Vote accepted (UDP) |
+| NAK | `NAK\|reason` | Server → Client | Vote rejected with reason (UDP) |
+| Result | `RESULT\|A:n\|B:n\|C:n` | Server → All | Live tally broadcast (TCP+SSL) |
+
+> Votes and ACK/NAK travel over UDP (port 5000). Results are broadcast over TCP+SSL (port 5001).
 
 ---
 
 ## Security
 
-- All communication encrypted with **SSL/TLS** using a self-signed certificate
+- Vote results broadcast encrypted with **SSL/TLS** over TCP using a self-signed certificate
+- Votes transmitted over **UDP** for speed and simplicity
 - Duplicate votes detected via per-client sequence numbers
 - Invalid options and malformed packets rejected with NAK
 - All shared state protected with **threading locks**
@@ -108,13 +114,7 @@ python bench.py
 | 20 | 4.80 votes/sec | 1169.52ms | 0% |
 | 50 | 4.23 votes/sec | 1531.39ms | 33% |
 
-Throughput decreases as concurrent clients increase, demonstrating UDP's
-connectionless nature — packets from multiple clients contend for the same
-server socket. Latency rises significantly under load due to UDP having no
-flow control or congestion management. Packet loss appears at 50 concurrent
-clients (33%), which is expected UDP behavior under high contention on a
-single machine. In a production environment this would be mitigated with
-load balancing and receive buffer tuning.
+Throughput decreases as concurrent clients increase, demonstrating UDP's connectionless nature — packets from multiple clients contend for the same server socket. Latency rises significantly under load due to UDP having no flow control or congestion management. Packet loss appears at 50 concurrent clients (33%), which is expected UDP behavior under high contention on a single machine. In a production environment this would be mitigated with load balancing and receive buffer tuning.
 
 ---
 
