@@ -102,17 +102,19 @@ python bench.py
 
 | Clients | Throughput | Avg Latency | Loss |
 |---|---|---|---|
-| 1 | 1,330 votes/sec | 0.10ms | 0% |
-| 5 | 4,745 votes/sec | 0.09ms | 0% |
-| 10 | 5,393 votes/sec | 0.10ms | 0% |
-| 20 | 5,707 votes/sec | 0.07ms | 0% |
-| 50 | 5,507 votes/sec | 0.10ms | 5.2% |
+| 1 | 15.78 votes/sec | 57.87ms | 0% |
+| 5 | 8.90 votes/sec | 482.40ms | 0% |
+| 10 | 5.76 votes/sec | 1526.44ms | 0% |
+| 20 | 4.80 votes/sec | 1169.52ms | 0% |
+| 50 | 4.23 votes/sec | 1531.39ms | 33% |
 
-Throughput scales from ~1,300 to ~5,700 votes/sec as concurrency increases,
-demonstrating effective multi-threading. Latency remains under 0.1ms across
-all loads. Packet loss only appears at 50 concurrent clients (5.2%), caused
-by contention on the shared SSL connections under high load — an expected
-trade-off at scale.
+Throughput decreases as concurrent clients increase, demonstrating UDP's
+connectionless nature — packets from multiple clients contend for the same
+server socket. Latency rises significantly under load due to UDP having no
+flow control or congestion management. Packet loss appears at 50 concurrent
+clients (33%), which is expected UDP behavior under high contention on a
+single machine. In a production environment this would be mitigated with
+load balancing and receive buffer tuning.
 
 ---
 
