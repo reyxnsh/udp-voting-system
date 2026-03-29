@@ -4,62 +4,61 @@ import threading
 import time
 import csv
 import matplotlib.pyplot as plt
-from protocol import SERVER_IP, SERVER_PORT, BUFFER_SIZE, MAX_RETRIES, MSG_ACK, MSG_NAK
+from protocol import SERVER_IP, UDP_PORT, TCP_PORT, BUFFER_SIZE, MAX_RETRIES, MSG_ACK, MSG_NAK, MSG_RESULT
 
 results = []
 results_lock = threading.Lock()
 
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-context.load_verify_locations("certs/server.crt")
-context.check_hostname = False
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.load_verify_locations("certs/server.crt")
+ssl_context.check_hostname = False
 
 def simulate_client(client_id, num_votes):
     latencies = []
     success = 0
     failed = 0
+
+    # UDP socket for votes
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.settimeout(3)
+
+    # TCP+SSL socket for results
     try:
-        raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        conn = context.wrap_socket(raw, server_hostname=SERVER_IP)
-        conn.connect((SERVER_IP, SERVER_PORT))
-        conn.settimeout(3)
+        raw_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp_conn = ssl_context.wrap_socket(raw_tcp, server_hostname=SERVER_IP)
+        tcp_conn.connect((SERVER_IP, TCP_PORT))
+        tcp_conn.settimeout(3)
     except Exception as e:
-        print(f"Client {client_id} failed to connect: {e}")
+        print(f"Client {client_id} TCP connect failed: {e}")
         with results_lock:
-            results.append({"client_id": client_id, "success": 0, "failed": num_votes, "avg_latency_ms": 0, "min_latency_ms": 0, "max_latency_ms": 0})
+            results.append({"client_id": client_id, "success": 0, "failed": num_votes,
+                            "avg_latency_ms": 0, "min_latency_ms": 0, "max_latency_ms": 0})
         return
+
+    # drain results in background
+    def drain_tcp():
+        try:
+            while True:
+                data = tcp_conn.recv(BUFFER_SIZE)
+                if not data:
+                    break
+        except:
+            pass
+    threading.Thread(target=drain_tcp, daemon=True).start()
+
     seq = 1
     options = ["A", "B", "C"]
-    buf = ""
     for i in range(num_votes):
         vote = options[i % 3]
-        packet = f"{client_id}|{seq}|{vote}\n"
+        packet = f"{client_id}|{seq}|{vote}"
         sent = False
         for retry in range(MAX_RETRIES):
             try:
                 start = time.time()
-                conn.sendall(packet.encode())
-                while True:
-                    chunk = conn.recv(BUFFER_SIZE)
-                    if not chunk:
-                        break
-                    buf += chunk.decode()
-                    if "\n" in buf:
-                        break
-                lines = buf.split("\n")
-                buf = lines[-1]
-                response = None
-                for line in lines[:-1]:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if line.startswith("RESULT"):
-                        continue
-                    if line.startswith(MSG_ACK) or line.startswith(MSG_NAK):
-                        response = line
-                        break
-                if response is None:
-                    continue
+                udp_sock.sendto(packet.encode(), (SERVER_IP, UDP_PORT))
+                data, _ = udp_sock.recvfrom(BUFFER_SIZE)
                 end = time.time()
+                response = data.decode().strip()
                 if response.startswith(MSG_ACK):
                     latencies.append((end - start) * 1000)
                     success += 1
@@ -76,10 +75,13 @@ def simulate_client(client_id, num_votes):
                 break
         if not sent:
             failed += 1
+
     try:
-        conn.close()
+        tcp_conn.close()
     except:
         pass
+    udp_sock.close()
+
     with results_lock:
         results.append({
             "client_id": client_id,
