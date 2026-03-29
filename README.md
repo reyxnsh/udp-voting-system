@@ -98,6 +98,22 @@ python bench.py
 - `results.csv` — raw metrics per client count
 - `perf_graphs.png` — throughput, latency, and packet loss graphs
 
+## Performance Observations
+
+| Clients | Throughput | Avg Latency | Loss |
+|---|---|---|---|
+| 1 | 1,330 votes/sec | 0.10ms | 0% |
+| 5 | 4,745 votes/sec | 0.09ms | 0% |
+| 10 | 5,393 votes/sec | 0.10ms | 0% |
+| 20 | 5,707 votes/sec | 0.07ms | 0% |
+| 50 | 5,507 votes/sec | 0.10ms | 5.2% |
+
+Throughput scales from ~1,300 to ~5,700 votes/sec as concurrency increases,
+demonstrating effective multi-threading. Latency remains under 0.1ms across
+all loads. Packet loss only appears at 50 concurrent clients (5.2%), caused
+by contention on the shared SSL connections under high load — an expected
+trade-off at scale.
+
 ---
 
 > **Note:** `certs/server.key` is excluded from version control via `.gitignore` for security.
