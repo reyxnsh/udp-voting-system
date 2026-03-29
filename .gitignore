@@ -1,0 +1,6 @@
+*.pyc
+__pycache__/
+certs/server.key
+results.csv
+perf_graphs.png
+*.log
